@@ -1,14 +1,11 @@
-import requests, json, math, datetime, os, pathlib
+import requests, math, datetime, pathlib
 
-# --- Predchozi pracovni den ---
-today = datetime.date.today()
-target = today - datetime.timedelta(days=1)
-while target.weekday() >= 5:   # 5=sobota, 6=nedele
-    target -= datetime.timedelta(days=1)
-target_str    = target.strftime("%d.%m.%Y")
-target_yf     = target.strftime("%Y-%m-%d")
+# Datum: CNB datum z dnesniho dne (burzy jsou zavrene)
+today      = datetime.date.today()
+target_str = today.strftime("%d.%m.%Y")
+target_yf  = today.strftime("%Y-%m-%d")
 
-print(f"Datum dashboardu: {target_str}")
+print(f"Stahuji data za: {target_str}")
 
 # --- Kurz EUR/CZK z CNB ---
 eur_rate = None
@@ -24,10 +21,12 @@ try:
             rate_val = float(parts[4].strip().replace(",", "."))
             amount   = float(parts[2].strip())
             eur_rate = round(rate_val / amount, 4)
-            print(f"  EUR/CZK = {eur_rate} (platne k {cnb_date})")
+            print(f"  EUR/CZK = {eur_rate} (k {cnb_date})")
             break
 except Exception as e:
     print(f"  CHYBA CNB: {e}")
+
+data_date = cnb_date if cnb_date else target_str
 
 # --- Ceny akcii z Yahoo Finance ---
 def get_stock(ticker, target_yf):
@@ -40,19 +39,16 @@ def get_stock(ticker, target_yf):
             closes     = result["indicators"]["quote"][0]["close"]
             timestamps = result["timestamp"]
             currency   = result["meta"]["currency"]
-            # Hledame cenu pro cilovy datum
             for i, ts in enumerate(timestamps):
                 dt = datetime.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
                 if dt == target_yf and closes[i]:
-                    return round(closes[i], 2), currency, dt
-            # Fallback: posledni dostupna cena pred cilovym datem
+                    return round(closes[i], 2), currency
             for i in range(len(timestamps)-1, -1, -1):
-                dt = datetime.datetime.utcfromtimestamp(timestamps[i]).strftime("%Y-%m-%d")
-                if dt <= target_yf and closes[i]:
-                    return round(closes[i], 2), currency, dt
+                if closes[i]:
+                    return round(closes[i], 2), currency
         except:
             pass
-    return None, None, None
+    return None, None
 
 stocks = [
     ("MONET.PR", "Moneta Money Bank", "Praha (PSE)"),
@@ -61,37 +57,29 @@ stocks = [
 
 rows = []
 for ticker, label, exchange in stocks:
-    price, currency, date = get_stock(ticker, target_yf)
+    price, currency = get_stock(ticker, target_yf)
     if price:
-        price_str = f"{price:,.2f} {currency}".replace(",", " ")
-        print(f"  {label}: {price_str} ({date})")
+        price_str = f"{price:.2f} {currency}"
+        print(f"  {label}: {price_str}")
         rows.append((label, ticker, exchange, price_str))
     else:
-        print(f"  {label}: CHYBA")
         rows.append((label, ticker, exchange, "Nedostupne"))
 
-# Kurz jako posledni radek
-eur_val = f"{eur_rate:,.4f} CZK".replace(",", " ") if eur_rate else "N/A"
+eur_val = f"{eur_rate:.4f} CZK" if eur_rate else "N/A"
 rows.append(("Kurz CZK/EUR (CNB)", "", "CNB", eur_val))
 
-# --- Generovani HTML ---
-now = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
-
+# --- HTML ---
+now = datetime.datetime.utcnow().strftime("%d.%m.%Y %H:%M")
 rows_html = ""
 for label, ticker, exchange, value in rows:
-    rows_html += f"""<tr>
-      <td class="col-name">{label}</td>
-      <td class="col-ticker">{ticker}</td>
-      <td class="col-exch">{exchange}</td>
-      <td class="col-price">{value}</td>
-    </tr>"""
+    rows_html += f"<tr><td class='col-name'>{label}</td><td class='col-ticker'>{ticker}</td><td class='col-exch'>{exchange}</td><td class='col-price'>{value}</td></tr>"
 
 html = f"""<!DOCTYPE html>
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard {target_str}</title>
+  <title>Dashboard {data_date}</title>
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{ font-family: Segoe UI, Arial, sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; padding: 36px 28px; }}
@@ -113,14 +101,11 @@ html = f"""<!DOCTYPE html>
 </head>
 <body>
   <h1>Financni dashboard</h1>
-  <p class="subtitle">Uzaviraci ceny k {target_str}</p>
+  <p class="subtitle">Uzaviraci ceny k {data_date}</p>
   <p class="updated">Vygenerovano: {now} UTC</p>
   <div class="table-wrap">
     <table>
-      <thead><tr>
-        <th>Polozka</th><th>Ticker</th><th>Burza</th>
-        <th style="text-align:right">Hodnota</th>
-      </tr></thead>
+      <thead><tr><th>Polozka</th><th>Ticker</th><th>Burza</th><th style="text-align:right">Hodnota</th></tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
   </div>
@@ -128,6 +113,5 @@ html = f"""<!DOCTYPE html>
 </body>
 </html>"""
 
-pathlib.Path("out").mkdir(exist_ok=True)
-pathlib.Path("out/index.html").write_text(html, encoding="utf-8")
-print(f"HTML vygenerovan: out/index.html")
+pathlib.Path("index.html").write_text(html, encoding="utf-8")
+print(f"HTML vygenerovan pro datum: {data_date}")
