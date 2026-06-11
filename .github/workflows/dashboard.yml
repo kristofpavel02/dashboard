@@ -1,0 +1,34 @@
+name: Denni dashboard
+
+on:
+  schedule:
+    - cron: "0 16 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Nastaveni Pythonu
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalace zavislosti
+        run: pip install requests
+
+      - name: Stazeni dat a generovani HTML
+        run: python fetch_and_build.py
+
+      - name: Commit a push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add index.html
+          git diff --staged --quiet || git commit -m "dashboard update"
+          git push
