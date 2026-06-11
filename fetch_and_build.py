@@ -62,20 +62,20 @@ rows = []
 for ticker, label, exchange in stocks:
     price, currency = get_stock(ticker, target_yf)
     if price:
-        price_str = f"{price:.2f} {currency}"
-        print(f"  {label}: {price_str}")
-        rows.append((label, ticker, exchange, price_str))
+        price_fmt = f"{price:.2f}".replace(".", ",")
+        print(f"  {label}: {price_fmt} {currency}")
+        rows.append((label, ticker, exchange, price_fmt, currency))
     else:
-        rows.append((label, ticker, exchange, "Nedostupne"))
+        rows.append((label, ticker, exchange, "Nedostupne", ""))
 
-eur_val = f"{eur_rate:.4f} CZK" if eur_rate else "N/A"
-rows.append(("Kurz CZK/EUR (CNB)", "", "CNB", eur_val))
+eur_fmt = f"{eur_rate:.4f}".replace(".", ",") if eur_rate else "N/A"
+rows.append(("Kurz CZK/EUR", "", "CNB", eur_fmt, "CZK/EUR"))
 
 # --- HTML ---
 now = datetime.datetime.utcnow().strftime("%d.%m.%Y %H:%M")
 rows_html = ""
-for label, ticker, exchange, value in rows:
-    rows_html += f"<tr><td class='col-name'>{label}</td><td class='col-ticker'>{ticker}</td><td class='col-exch'>{exchange}</td><td class='col-price'>{value}</td></tr>"
+for label, ticker, exchange, value, unit in rows:
+    rows_html += f"<tr><td class='col-name'>{label}</td><td class='col-ticker'>{ticker}</td><td class='col-exch'>{exchange}</td><td class='col-price'>{value}</td><td class='col-unit'>{unit}</td></tr>"
 
 html = f"""<!DOCTYPE html>
 <html lang="cs">
@@ -85,21 +85,25 @@ html = f"""<!DOCTYPE html>
   <title>Dashboard {data_date}</title>
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ font-family: Segoe UI, Arial, sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; padding: 36px 28px; }}
-    h1 {{ font-size: 1.55rem; font-weight: 700; color: #fff; margin-bottom: 4px; }}
-    .subtitle {{ font-size: 1rem; color: #4ecca3; font-weight: 600; margin-bottom: 4px; }}
-    .updated {{ font-size: .80rem; color: #444; margin-bottom: 30px; }}
-    .table-wrap {{ overflow-x: auto; }}
-    table {{ width: 100%; border-collapse: collapse; font-size: .91rem; }}
-    thead th {{ background: #161922; color: #888; font-weight: 600; font-size: .76rem; text-transform: uppercase; letter-spacing: .07em; padding: 11px 16px; text-align: left; border-bottom: 1px solid #252836; }}
-    tbody tr {{ border-bottom: 1px solid #1c1f2c; }}
-    tbody tr:hover {{ background: #161922; }}
-    tbody td {{ padding: 14px 16px; vertical-align: middle; }}
-    .col-name {{ font-weight: 600; color: #fff; }}
-    .col-ticker {{ font-family: Consolas, monospace; font-size: .85rem; color: #4ecca3; }}
-    .col-exch {{ font-size: .82rem; color: #666; }}
-    .col-price {{ font-weight: 600; text-align: right; }}
-    footer {{ margin-top: 40px; font-size: .74rem; color: #444; }}
+    body {{ font-family: Segoe UI, Arial, sans-serif; background: #0f1117; color: #ffffff; min-height: 100vh; padding: 32px 24px; }}
+    h1 {{ font-size: 1.4rem; font-weight: 700; color: #fff; margin-bottom: 4px; }}
+    .subtitle {{ font-size: .95rem; color: #4ecca3; font-weight: 600; margin-bottom: 4px; }}
+    .updated {{ font-size: .78rem; color: #aaaaaa; margin-bottom: 24px; }}
+    .table-wrap {{ display: inline-block; border: 1px solid #4ecca3; border-radius: 8px; overflow: hidden; }}
+    table {{ border-collapse: collapse; font-size: .91rem; }}
+    thead th {{ background: #1a1d27; color: #ffffff; font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; padding: 9px 14px; text-align: left; border-bottom: 2px solid #4ecca3; border-right: 1px solid #2e3347; white-space: nowrap; }}
+    thead th:last-child {{ border-right: none; }}
+    tbody tr {{ border-bottom: 1px solid #2e3347; }}
+    tbody tr:last-child {{ border-bottom: none; }}
+    tbody tr:hover {{ background: #1a1d27; }}
+    tbody td {{ padding: 9px 14px; vertical-align: middle; color: #ffffff; border-right: 1px solid #2e3347; white-space: nowrap; }}
+    tbody td:last-child {{ border-right: none; }}
+    .col-name {{ font-weight: 600; }}
+    .col-ticker {{ font-family: Consolas, monospace; font-size: .84rem; color: #4ecca3; }}
+    .col-exch {{ font-size: .82rem; }}
+    .col-price {{ font-weight: 700; text-align: right; }}
+    .col-unit {{ font-size: .82rem; color: #aaaaaa; padding-left: 8px; }}
+    footer {{ margin-top: 24px; font-size: .74rem; color: #888; }}
   </style>
 </head>
 <body>
@@ -108,7 +112,7 @@ html = f"""<!DOCTYPE html>
   <p class="updated">Vygenerovano: {now} UTC</p>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Polozka</th><th>Ticker</th><th>Burza</th><th style="text-align:right">Hodnota</th></tr></thead>
+      <thead><tr><th>Polozka</th><th>Ticker</th><th>Zdroj</th><th style="text-align:right">Hodnota</th><th>Jednotka</th></tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
   </div>
