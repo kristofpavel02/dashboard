@@ -1,9 +1,12 @@
 import requests, math, datetime, pathlib
 
-# Datum: CNB datum z dnesniho dne (burzy jsou zavrene)
-today      = datetime.date.today()
-target_str = today.strftime("%d.%m.%Y")
-target_yf  = today.strftime("%Y-%m-%d")
+# Predchozi pracovni den (vcera, preskoci vikend)
+target = datetime.date.today() - datetime.timedelta(days=1)
+while target.weekday() >= 5:
+    target -= datetime.timedelta(days=1)
+
+target_str = target.strftime("%d.%m.%Y")
+target_yf  = target.strftime("%Y-%m-%d")
 
 print(f"Stahuji data za: {target_str}")
 
