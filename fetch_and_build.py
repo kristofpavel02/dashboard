@@ -62,7 +62,10 @@ def get_tmr():
     try:
         today = datetime.date.today().strftime("%Y-%m-%d")
         url   = f"https://www.bsse.sk/BCPB_WEB_API/api/Security/GetOne?find=%23KEY%3DA%7C%5E%7C2147%23&tradesummday={today}&daysinterval=7&lang=SK"
-        resp  = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        resp  = requests.get(url, timeout=15, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Referer": "https://www.bsse.sk/bcpb/detail-cp/?isin=%23KEY%3DA%7C%5E%7C2147%23"
+        })
         data  = json.loads(json.loads(resp.text))
         rows  = data["Tables"][0]["Rows"]
         if not rows:
