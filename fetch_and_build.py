@@ -1,4 +1,4 @@
-import requests, math, datetime, pathlib
+import requests, math, datetime, pathlib, json
 
 # Dnesni obchodni den (dnes, o vikendu posledni patek)
 target = datetime.date.today()
@@ -58,6 +58,18 @@ stocks = [
     ("ALWN.AT",  "Allwyn",            "Ateny (Euronext)"),
 ]
 
+def get_tmr():
+    try:
+        today = datetime.date.today().strftime("%Y-%m-%d")
+        url   = f"https://www.bsse.sk/BCPB_WEB_API/api/Security/GetOne?find=%23KEY%3DA%7C%5E%7C2147%23&tradesummday={today}&daysinterval=1&lang=SK"
+        resp  = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        data  = json.loads(json.loads(resp.text))
+        row   = data["Tables"][0]["Rows"][0]
+        price = round(float(row["Cells"][1].replace(",", ".")), 2)
+        return price, row["Cells"][2]
+    except:
+        return None, None
+
 rows = []
 for ticker, label, exchange in stocks:
     price, currency = get_stock(ticker, target_yf)
@@ -67,6 +79,14 @@ for ticker, label, exchange in stocks:
         rows.append((label, ticker, exchange, price_fmt, currency))
     else:
         rows.append((label, ticker, exchange, "Nedostupne", ""))
+
+tmr_price, tmr_currency = get_tmr()
+if tmr_price:
+    tmr_fmt = f"{tmr_price:.2f}".replace(".", ",")
+    print(f"  TMR: {tmr_fmt} {tmr_currency}")
+    rows.append(("Tatry Mountain Resorts", "TMR", "Bratislava (BCPB)", tmr_fmt, tmr_currency))
+else:
+    rows.append(("Tatry Mountain Resorts", "TMR", "Bratislava (BCPB)", "Nedostupne", ""))
 
 eur_fmt = f"{eur_rate:.4f}".replace(".", ",") if eur_rate else "N/A"
 rows.append(("Kurz CZK/EUR", "", "CNB", eur_fmt, "CZK/EUR"))
@@ -116,7 +136,7 @@ html = f"""<!DOCTYPE html>
       <tbody>{rows_html}</tbody>
     </table>
   </div>
-  <footer>Zdroje: Yahoo Finance &bull; Ceska narodni banka CNB &bull; Generovano GitHub Actions</footer>
+  <footer>Zdroje: Yahoo Finance &bull; BCPB (TMR) &bull; Ceska narodni banka CNB &bull; Generovano GitHub Actions</footer>
 </body>
 </html>"""
 
