@@ -1,7 +1,7 @@
 import requests, math, datetime, pathlib, json
 
-# Dnesni obchodni den (dnes, o vikendu posledni patek)
-target = datetime.date.today()
+# Predchozi obchodni den (x-1, vcera, o vikendu posledni patek)
+target = datetime.date.today() - datetime.timedelta(days=1)
 while target.weekday() >= 5:
     target -= datetime.timedelta(days=1)
 
