@@ -61,13 +61,17 @@ stocks = [
 def get_tmr():
     try:
         today = datetime.date.today().strftime("%Y-%m-%d")
-        url   = f"https://www.bsse.sk/BCPB_WEB_API/api/Security/GetOne?find=%23KEY%3DA%7C%5E%7C2147%23&tradesummday={today}&daysinterval=1&lang=SK"
-        resp  = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        url   = f"https://www.bsse.sk/BCPB_WEB_API/api/Security/GetOne?find=%23KEY%3DA%7C%5E%7C2147%23&tradesummday={today}&daysinterval=7&lang=SK"
+        resp  = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         data  = json.loads(json.loads(resp.text))
-        row   = data["Tables"][0]["Rows"][0]
+        rows  = data["Tables"][0]["Rows"]
+        if not rows:
+            return None, None
+        row   = rows[-1]   # posledni (nejnovejsi) obchod
         price = round(float(row["Cells"][1].replace(",", ".")), 2)
         return price, row["Cells"][2]
-    except:
+    except Exception as e:
+        print(f"  CHYBA TMR: {e}")
         return None, None
 
 rows = []
