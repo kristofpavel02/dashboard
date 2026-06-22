@@ -2,7 +2,7 @@ name: Denni dashboard
 
 on:
   schedule:
-    - cron: "0 5 * * 1-5"
+    - cron: "0 5 * * 1-6"
   workflow_dispatch:
 
 jobs:
