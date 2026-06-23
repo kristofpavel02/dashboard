@@ -55,7 +55,6 @@ def get_stock(ticker, target_yf):
 
 stocks = [
     ("MONET.PR", "Moneta Money Bank", "Praha (PSE)"),
-    ("ALWN.AT",  "Allwyn",            "Ateny (Euronext)"),
 ]
 
 def get_tmr():
@@ -94,6 +93,14 @@ if tmr_price:
     rows.append(("Tatry Mountain Resorts", "TMR", "Bratislava (BCPB)", tmr_fmt, tmr_currency))
 else:
     rows.append(("Tatry Mountain Resorts", "TMR", "Bratislava (BCPB)", "Nedostupne", ""))
+
+alw_price, alw_currency = get_stock("ALWN.AT", target_yf)
+if alw_price:
+    alw_fmt = f"{alw_price:.2f}".replace(".", ",")
+    print(f"  Allwyn: {alw_fmt} {alw_currency}")
+    rows.append(("Allwyn", "ALWN.AT", "Ateny (Euronext)", alw_fmt, alw_currency))
+else:
+    rows.append(("Allwyn", "ALWN.AT", "Ateny (Euronext)", "Nedostupne", ""))
 
 eur_fmt = f"{eur_rate:.4f}".replace(".", ",") if eur_rate else "N/A"
 rows.append(("Kurz CZK/EUR", "", "CNB", eur_fmt, "CZK/EUR"))
