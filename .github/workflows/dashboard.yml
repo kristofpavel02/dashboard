@@ -32,11 +32,14 @@ jobs:
       - name: Stazeni dat a generovani HTML
         run: python fetch_and_build.py
 
+      - name: Stazeni dat a generovani HTML (Stooq varianta)
+        run: python fetch_and_build_stooq.py
+
       - name: Commit a push
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add index.html
+          git add index.html stooq.html
           if git diff --staged --quiet; then
             echo "Zadne zmeny, koncim."
             exit 0
