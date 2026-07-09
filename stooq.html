@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard 08.07.2026</title>
+  <title>Dashboard STOOQ 08.07.2026</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Segoe UI, Arial, sans-serif; background: #0f1117; color: #ffffff; min-height: 100vh; padding: 32px 24px; }
     h1 { font-size: 1.4rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .tag { display: inline-block; font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #0f1117; background: #ffb84d; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
     .subtitle { font-size: .95rem; color: #4ecca3; font-weight: 600; margin-bottom: 4px; }
     .updated { font-size: .78rem; color: #aaaaaa; margin-bottom: 24px; }
     .table-wrap { display: inline-block; border: 1px solid #4ecca3; border-radius: 8px; overflow: hidden; }
@@ -28,15 +29,15 @@
   </style>
 </head>
 <body>
-  <h1>Financni dashboard</h1>
+  <h1>Financni dashboard <span class="tag">Stooq test</span></h1>
   <p class="subtitle">Uzaviraci ceny k 08.07.2026</p>
-  <p class="updated">Vygenerovano: 09.07.2026 08:23 UTC</p>
+  <p class="updated">Vygenerovano: 09.07.2026 08:23 UTC &bull; ceny jen za uvedene datum (jinak "Nedostupne")</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Polozka</th><th>Ticker</th><th>Zdroj</th><th style="text-align:right">Hodnota</th><th>Jednotka</th></tr></thead>
-      <tbody><tr><td class='col-name'>Moneta Money Bank</td><td class='col-ticker'>MONET.PR</td><td class='col-exch'>Praha (PSE)</td><td class='col-price'>192,20</td><td class='col-unit'>CZK</td></tr><tr><td class='col-name'>Tatry Mountain Resorts</td><td class='col-ticker'>TMR</td><td class='col-exch'>Bratislava (BCPB)</td><td class='col-price'>15,00</td><td class='col-unit'>EUR</td></tr><tr><td class='col-name'>Allwyn</td><td class='col-ticker'>ALWN.AT</td><td class='col-exch'>Ateny (Euronext)</td><td class='col-price'>13,79</td><td class='col-unit'>EUR</td></tr><tr><td class='col-name'>Kurz CZK/EUR</td><td class='col-ticker'></td><td class='col-exch'>CNB</td><td class='col-price'>24,2500</td><td class='col-unit'>CZK/EUR</td></tr></tbody>
+      <tbody><tr><td class='col-name'>Moneta Money Bank</td><td class='col-ticker'>MONET.PR</td><td class='col-exch'>Praha · Stooq: nenalezeno</td><td class='col-price'>Nedostupne</td><td class='col-unit'></td></tr><tr><td class='col-name'>Tatry Mountain Resorts</td><td class='col-ticker'>TMR</td><td class='col-exch'>Bratislava (BCPB)</td><td class='col-price'>15,00</td><td class='col-unit'>EUR</td></tr><tr><td class='col-name'>Allwyn</td><td class='col-ticker'>ALWN.AT</td><td class='col-exch'>Ateny (ATHEX) · Stooq: nenalezeno</td><td class='col-price'>Nedostupne</td><td class='col-unit'></td></tr><tr><td class='col-name'>Kurz CZK/EUR</td><td class='col-ticker'></td><td class='col-exch'>CNB</td><td class='col-price'>24,2500</td><td class='col-unit'>CZK/EUR</td></tr></tbody>
     </table>
   </div>
-  <footer>Zdroje: Yahoo Finance &bull; BCPB (TMR) &bull; Ceska narodni banka CNB &bull; Generovano GitHub Actions</footer>
+  <footer>Zdroje: Stooq (Moneta, Allwyn) &bull; Yahoo (zaloha) &bull; BCPB (TMR) &bull; CNB (kurz) &bull; Generovano GitHub Actions</footer>
 </body>
 </html>
