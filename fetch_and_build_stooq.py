@@ -1,25 +1,23 @@
-import requests, datetime, pathlib, json
+import requests, datetime, pathlib, json, zipfile, io
 
 # ============================================================
 #  Paralelni "autoritativni" varianta dashboardu -> stooq.html
-#  - Moneta a Allwyn: primarne stockanalysis.com, zaloha Yahoo
-#  - TMR: z BCPB (stejne jako hlavni stranka)
-#  - Kurz EUR/CZK: z CNB (stejne jako hlavni stranka)
-#  POJISTKA NA DATUM: cena se pouzije JEN kdyz je za cilovy den,
-#  jinak "Nedostupne" (radeji nic nez o den starsi cislo).
-#  Skript vypisuje do logu, co z rozhrani prislo (kvuli ladeni).
+#  - Moneta: z prazske burzy (PSE) - denni kurzovni listek PL.ZIP
+#  - Allwyn: stockanalysis.com, zaloha Yahoo (zatim beze zmeny)
+#  - TMR: z BCPB ; Kurz EUR/CZK: z CNB
+#  POJISTKA NA DATUM: cena se pouzije JEN za cilovy den, jinak "Nedostupne".
+#  Skript vypisuje do logu, co ze zdroju prislo (kvuli ladeni).
 # ============================================================
 
-# tickery na stockanalysis.com potvrzene uzivatelem
-MONETA_SA = "PRA:MONET"
-ALLWYN_SA = "ATH:ALWN"
+MONETA_ISIN = "CZ0008040318"   # Moneta Money Bank na PSE
+ALLWYN_SA   = "ATH:ALWN"       # Allwyn na stockanalysis.com
 
 target = datetime.date.today() - datetime.timedelta(days=1)
 while target.weekday() >= 5:
     target -= datetime.timedelta(days=1)
 
-target_str = target.strftime("%d.%m.%Y")   # 07.07.2026
-target_iso = target.strftime("%Y-%m-%d")    # 2026-07-07
+target_str = target.strftime("%d.%m.%Y")
+target_iso = target.strftime("%Y-%m-%d")
 
 print(f"[ALT] Stahuji data za: {target_str}")
 
@@ -41,53 +39,94 @@ except Exception as e:
     print(f"  CHYBA CNB: {e}")
 data_date = cnb_date if cnb_date else target_str
 
-# --- pomocna: prevod ruznych tvaru data na YYYY-MM-DD ---
+# --- prevod ruznych tvaru data na YYYY-MM-DD ---
 def to_iso(val):
     if val is None:
         return None
-    # epoch (cislo nebo cislicovy retezec)
     try:
         n = float(val)
-        if n > 10_000_000:               # vypada jako epoch v sekundach
+        if n > 10_000_000:
             return datetime.datetime.utcfromtimestamp(n).strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         pass
-    s = str(val)
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y", "%d.%m.%Y"):
+    s = str(val).strip()
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y", "%m/%d/%Y", "%Y%m%d"):
         try:
             return datetime.datetime.strptime(s[:len(fmt)+4], fmt).strftime("%Y-%m-%d")
         except ValueError:
             continue
     return s[:10]
 
-# --- stockanalysis.com: zaverka JEN za cilovy den (+ vypis vzorku) ---
+def norm_num(raw):
+    p = str(raw).replace(" ", "").replace("\xa0", "")
+    if "." in p and "," in p:      # 1.234,50 -> tisice teckou, desetiny carkou
+        p = p.replace(".", "").replace(",", ".")
+    elif "," in p:                 # 191,20 -> 191.20
+        p = p.replace(",", ".")
+    return round(float(p), 2)
+
+# --- Moneta z PSE: denni kurzovni listek PL.ZIP (soubor AK) ---
+def get_pse_close(isin, target_iso):
+    url = "http://ftp.pse.cz/results.ak/PL.ZIP"
+    try:
+        r = requests.get(url, timeout=25, headers={"User-Agent": "Mozilla/5.0"})
+        print(f"  PSE GET {url} -> HTTP {r.status_code}, {len(r.content)} B")
+        if r.status_code != 200 or not r.content:
+            return None, "PSE: stazeni selhalo"
+        zf = zipfile.ZipFile(io.BytesIO(r.content))
+        names = zf.namelist()
+        print(f"  PSE ZIP obsahuje: {names}")
+        ak = next((n for n in names if n.split('/')[-1].upper().startswith("AK")), None)
+        if not ak:
+            return None, "PSE: AK soubor nenalezen"
+        raw = zf.read(ak)
+        try:
+            text = raw.decode("cp1250")
+        except Exception:
+            text = raw.decode("latin-1", errors="replace")
+        for line in text.splitlines():
+            if isin in line:
+                print(f"  PSE radek Moneta: {line[:130]!r}")
+                delim = ";" if ";" in line else ("," if line.count(",") >= 4 else None)
+                fields = [f.strip() for f in line.split(delim)] if delim else line.split()
+                if len(fields) < 5:
+                    return None, "PSE: neznamy format"
+                trad_day = to_iso(fields[3])
+                try:
+                    price = norm_num(fields[4])
+                except ValueError:
+                    return None, f"PSE: cislo necitelne ({fields[4]!r})"
+                if trad_day == target_iso:
+                    print(f"  PSE [{isin}]: {price} za {target_iso} OK")
+                    return price, "PSE"
+                print(f"  PSE [{isin}]: den {trad_day} != {target_iso} -> nepouzivam")
+                return None, f"PSE: den {trad_day}"
+        return None, "PSE: ISIN nenalezen"
+    except Exception as e:
+        print(f"  PSE chyba: {e}")
+        return None, "PSE: chyba"
+
+# --- stockanalysis.com (pro Allwyn): zaverka JEN za cilovy den ---
 def get_stockanalysis(symbol, target_iso):
     exch, tick = symbol.split(":")
-    candidates = [
+    for url in [
         f"https://stockanalysis.com/api/symbol/e/{symbol}/history?range=3M&period=Daily",
         f"https://stockanalysis.com/api/symbol/e/{exch.lower()}/{tick}/history?range=3M&period=Daily",
-        f"https://stockanalysis.com/api/symbol/e/{symbol}/history?range=1M",
-    ]
-    for url in candidates:
+    ]:
         try:
             r = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
             print(f"  SA GET {url} -> HTTP {r.status_code}")
             if r.status_code != 200:
                 continue
             j = r.json()
-            print(f"  SA vzorek: {str(j)[:400]}")
-            # najdi seznam radku (ruzne mozne tvary)
+            print(f"  SA vzorek: {str(j)[:300]}")
             rows = None
             if isinstance(j, dict):
                 d = j.get("data")
-                if isinstance(d, list):
-                    rows = d
-                elif isinstance(d, dict) and isinstance(d.get("data"), list):
-                    rows = d["data"]
-            if isinstance(j, list):
+                rows = d if isinstance(d, list) else (d.get("data") if isinstance(d, dict) else None)
+            elif isinstance(j, list):
                 rows = j
             if not rows:
-                print("  SA: neznamy tvar odpovedi, zkousim dalsi variantu")
                 continue
             for row in rows:
                 if isinstance(row, dict):
@@ -98,19 +137,17 @@ def get_stockanalysis(symbol, target_iso):
                 else:
                     continue
                 if dt == target_iso and cl not in (None, "", "N/A"):
-                    print(f"  SA [{symbol}]: {round(float(cl),2)} za {target_iso} OK")
                     return round(float(cl), 2), "stockanalysis"
-            print(f"  SA [{symbol}]: za {target_iso} v datech NENI -> nepouzivam")
             return None, "SA: den chybi"
         except Exception as e:
-            print(f"  SA [{symbol}] chyba: {e}")
+            print(f"  SA chyba: {e}")
     return None, "SA: nedostupne"
 
-# --- Yahoo zaloha: take JEN za cilovy den ---
+# --- Yahoo zaloha: JEN za cilovy den ---
 def get_yahoo_exact(ticker, target_iso):
     for base in ["query1", "query2"]:
         try:
-            url  = f"https://{base}.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=15d"
+            url = f"https://{base}.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=15d"
             r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             res = r.json()["chart"]["result"][0]
             closes = res["indicators"]["quote"][0]["close"]
@@ -122,51 +159,60 @@ def get_yahoo_exact(ticker, target_iso):
             pass
     return None, None
 
-def resolve(symbol_sa, yahoo_ticker, currency, target_iso):
-    price, src = get_stockanalysis(symbol_sa, target_iso)
-    if price is not None:
-        return price, currency, src
-    yp, yc = get_yahoo_exact(yahoo_ticker, target_iso)
-    if yp is not None:
-        print(f"  Yahoo [{yahoo_ticker}]: {yp} za {target_iso} OK (zaloha)")
-        return yp, (yc or currency), "Yahoo (zaloha)"
-    return None, currency, src
-
-# --- TMR z BCPB (stejne jako hlavni stranka) ---
+# --- TMR z BCPB ---
 def get_tmr():
     try:
         today = datetime.date.today().strftime("%Y-%m-%d")
         url = f"https://www.bsse.sk/BCPB_WEB_API/api/Security/GetOne?find=%23KEY%3DA%7C%5E%7C2147%23&tradesummday={today}&daysinterval=7&lang=SK"
         r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.bsse.sk/bcpb/detail-cp/?isin=%23KEY%3DA%7C%5E%7C2147%23"})
-        rows = json.loads(json.loads(r.text))["Tables"][0]["Rows"]
-        if not rows:
+        rr = json.loads(json.loads(r.text))["Tables"][0]["Rows"]
+        if not rr:
             return None, None
-        return round(float(rows[-1]["Cells"][1].replace(",", ".")), 2), rows[-1]["Cells"][2]
+        return round(float(rr[-1]["Cells"][1].replace(",", ".")), 2), rr[-1]["Cells"][2]
     except Exception as e:
         print(f"  CHYBA TMR: {e}")
         return None, None
 
-# --- sestaveni radku ---
+# ============================================================
+#  Sestaveni radku
+# ============================================================
 rows = []
-m_price, m_cur, m_src = resolve(MONETA_SA, "MONET.PR", "CZK", target_iso)
+
+# Moneta: PSE primarne, Yahoo zaloha
+m_price, m_src = get_pse_close(MONETA_ISIN, target_iso)
+if m_price is None:
+    yp, _ = get_yahoo_exact("MONET.PR", target_iso)
+    if yp is not None:
+        print(f"  Yahoo [MONET.PR]: {yp} za {target_iso} OK (zaloha)")
+        m_price, m_src = yp, "Yahoo (zaloha)"
 rows.append(("Moneta Money Bank", "MONET.PR", f"Praha \u00b7 {m_src}",
              f"{m_price:.2f}".replace(".", ",") if m_price is not None else "Nedostupne",
-             m_cur if m_price is not None else ""))
+             "CZK" if m_price is not None else ""))
 
+# TMR z BCPB
 tmr_price, tmr_cur = get_tmr()
 rows.append(("Tatry Mountain Resorts", "TMR", "Bratislava (BCPB)",
              f"{tmr_price:.2f}".replace(".", ",") if tmr_price else "Nedostupne",
              tmr_cur if tmr_price else ""))
 
-a_price, a_cur, a_src = resolve(ALLWYN_SA, "ALWN.AT", "EUR", target_iso)
+# Allwyn: stockanalysis primarne, Yahoo zaloha
+a_price, a_src = get_stockanalysis(ALLWYN_SA, target_iso)
+if a_price is None:
+    yp, _ = get_yahoo_exact("ALWN.AT", target_iso)
+    if yp is not None:
+        print(f"  Yahoo [ALWN.AT]: {yp} za {target_iso} OK (zaloha)")
+        a_price, a_src = yp, "Yahoo (zaloha)"
 rows.append(("Allwyn", "ALWN.AT", f"Ateny (ATHEX) \u00b7 {a_src}",
              f"{a_price:.2f}".replace(".", ",") if a_price is not None else "Nedostupne",
-             a_cur if a_price is not None else ""))
+             "EUR" if a_price is not None else ""))
 
+# Kurz EUR/CZK
 eur_fmt = f"{eur_rate:.4f}".replace(".", ",") if eur_rate else "N/A"
 rows.append(("Kurz CZK/EUR", "", "CNB", eur_fmt, "CZK/EUR"))
 
-# --- HTML ---
+# ============================================================
+#  HTML
+# ============================================================
 now = datetime.datetime.utcnow().strftime("%d.%m.%Y %H:%M")
 rows_html = ""
 for label, ticker, exchange, value, unit in rows:
@@ -212,7 +258,7 @@ html = f"""<!DOCTYPE html>
       <tbody>{rows_html}</tbody>
     </table>
   </div>
-  <footer>Zdroje: stockanalysis.com (Moneta, Allwyn) &bull; Yahoo (zaloha) &bull; BCPB (TMR) &bull; CNB (kurz) &bull; Generovano GitHub Actions</footer>
+  <footer>Zdroje: PSE (Moneta) &bull; stockanalysis/Yahoo (Allwyn) &bull; BCPB (TMR) &bull; CNB (kurz) &bull; Generovano GitHub Actions</footer>
 </body>
 </html>"""
 
