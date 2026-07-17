@@ -10,7 +10,8 @@ import requests, datetime, pathlib, json, zipfile, io
 # ============================================================
 
 MONETA_ISIN = "CZ0008040318"   # Moneta Money Bank na PSE
-ALLWYN_SA   = "ATH:ALWN"       # Allwyn na stockanalysis.com
+ALLWYN_ISIN = "GRS419003009"   # Allwyn AG na Euronext Athens
+ALLWYN_MIC  = "XATH"           # MIC kod aténské burzy
 
 target = datetime.date.today() - datetime.timedelta(days=1)
 while target.weekday() >= 5:
@@ -195,8 +196,55 @@ rows.append(("Tatry Mountain Resorts", "TMR", "Bratislava (BCPB)",
              f"{tmr_price:.2f}".replace(".", ",") if tmr_price else "Nedostupne",
              tmr_cur if tmr_price else ""))
 
-# Allwyn: stockanalysis primarne, Yahoo zaloha
-a_price, a_src = get_stockanalysis(ALLWYN_SA, target_iso)
+# --- Allwyn z Euronext Athens: stazeni CSV historie (POST), JEN za cilovy den ---
+def get_euronext_close(isin, mic, target_iso):
+    ident = f"{isin}-{mic}"
+    payload = {"format": "csv", "decimal_separator": ".", "date_form": "d/m/Y",
+               "op": "", "adjusted": "Y", "base100": ""}
+    hosts = ["live.euronext.com", "athens.euronext.com"]
+    for host in hosts:
+        url = f"https://{host}/en/ajax/AwlHistoricalPrice/getFullDownloadAjax/{ident}"
+        try:
+            r = requests.post(url, data=payload, timeout=25,
+                              headers={"User-Agent": "Mozilla/5.0",
+                                       "X-Requested-With": "XMLHttpRequest",
+                                       "Referer": f"https://{host}/en/product/equities/{ident}"})
+            print(f"  EN POST {url} -> HTTP {r.status_code}, {len(r.text)} zn.")
+            text = r.text.strip()
+            if r.status_code != 200 or not text:
+                continue
+            print(f"  EN vzorek: {text[:250]!r}")
+            lines = [ln for ln in text.splitlines() if ln.strip()]
+            # najdi hlavicku s Date a Close
+            delim = ";" if any(l.count(";") >= 4 for l in lines) else ","
+            hdr_idx = next((i for i, l in enumerate(lines)
+                            if "date" in l.lower() and "close" in l.lower()), None)
+            if hdr_idx is not None:
+                cols = [c.strip().lower() for c in lines[hdr_idx].split(delim)]
+                di = next((k for k, c in enumerate(cols) if c == "date"), 0)
+                ci = next((k for k, c in enumerate(cols) if "close" in c), 4)
+                data_lines = lines[hdr_idx + 1:]
+            else:
+                di, ci, data_lines = 0, 4, lines
+            for ln in data_lines:
+                f = [x.strip().strip('"') for x in ln.split(delim)]
+                if len(f) <= max(di, ci):
+                    continue
+                d = to_iso(f[di])
+                if d == target_iso and f[ci] not in ("", "N/A", "-"):
+                    try:
+                        price = norm_num(f[ci])
+                    except ValueError:
+                        continue
+                    print(f"  EN [{ident}]: {price} za {target_iso} OK ({host})")
+                    return price, "Euronext"
+            print(f"  EN [{ident}]: za {target_iso} v datech neni ({host})")
+        except Exception as e:
+            print(f"  EN [{ident}] chyba ({host}): {e}")
+    return None, "Euronext: nedostupne"
+
+# Allwyn: Euronext primarne, Yahoo zaloha
+a_price, a_src = get_euronext_close(ALLWYN_ISIN, ALLWYN_MIC, target_iso)
 if a_price is None:
     yp, _ = get_yahoo_exact("ALWN.AT", target_iso)
     if yp is not None:
@@ -258,7 +306,7 @@ html = f"""<!DOCTYPE html>
       <tbody>{rows_html}</tbody>
     </table>
   </div>
-  <footer>Zdroje: PSE (Moneta) &bull; stockanalysis/Yahoo (Allwyn) &bull; BCPB (TMR) &bull; CNB (kurz) &bull; Generovano GitHub Actions</footer>
+  <footer>Zdroje: PSE (Moneta) &bull; Euronext/Yahoo (Allwyn) &bull; BCPB (TMR) &bull; CNB (kurz) &bull; Generovano GitHub Actions</footer>
 </body>
 </html>"""
 
