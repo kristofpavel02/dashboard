@@ -49,8 +49,8 @@ def to_iso(val):
             return datetime.datetime.utcfromtimestamp(n).strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         pass
-    s = str(val).strip()
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y", "%m/%d/%Y", "%Y%m%d"):
+    s = str(val).strip().strip('"').strip()
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y%m%d"):
         try:
             return datetime.datetime.strptime(s[:len(fmt)+4], fmt).strftime("%Y-%m-%d")
         except ValueError:
