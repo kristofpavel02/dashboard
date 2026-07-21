@@ -160,6 +160,30 @@ def get_yahoo_exact(ticker, target_iso):
             pass
     return None, None
 
+# --- Yahoo "cerstve pole": posledni zaverka z meta.regularMarketPrice + jeji datum ---
+def get_yahoo_fresh(ticker, target_iso):
+    for base in ["query1", "query2"]:
+        try:
+            url = f"https://{base}.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=5d"
+            r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            meta = r.json()["chart"]["result"][0]["meta"]
+            px = meta.get("regularMarketPrice")
+            t  = meta.get("regularMarketTime")
+            cur = meta.get("currency")
+            if px is None or t is None:
+                print(f"  YF [{ticker}]: meta bez ceny/casu")
+                continue
+            d = datetime.datetime.utcfromtimestamp(t).strftime("%Y-%m-%d")
+            print(f"  YF [{ticker}]: regularMarketPrice={px} k datu {d} (cil {target_iso})")
+            if d == target_iso:
+                print(f"  YF [{ticker}]: {round(float(px),2)} za {target_iso} OK")
+                return round(float(px), 2), cur
+            print(f"  YF [{ticker}]: datum nesedi -> nepouzivam")
+            return None, None
+        except Exception as e:
+            print(f"  YF [{ticker}] chyba: {e}")
+    return None, None
+
 # --- TMR z BCPB ---
 def get_tmr():
     try:
@@ -243,13 +267,15 @@ def get_euronext_close(isin, mic, target_iso):
             print(f"  EN [{ident}] chyba ({host}): {e}")
     return None, "Euronext: nedostupne"
 
-# Allwyn: Euronext primarne, Yahoo zaloha
-a_price, a_src = get_euronext_close(ALLWYN_ISIN, ALLWYN_MIC, target_iso)
+# Allwyn: Yahoo "cerstve pole" (regularMarketPrice) primarne, zpozdena tabulka jako zaloha
+a_price, a_cur = get_yahoo_fresh("ALWN.AT", target_iso)
+a_src = "Yahoo (close)"
 if a_price is None:
-    yp, _ = get_yahoo_exact("ALWN.AT", target_iso)
-    if yp is not None:
-        print(f"  Yahoo [ALWN.AT]: {yp} za {target_iso} OK (zaloha)")
-        a_price, a_src = yp, "Yahoo (zaloha)"
+    a_price, a_cur = get_yahoo_exact("ALWN.AT", target_iso)
+    if a_price is not None:
+        a_src = "Yahoo (tabulka)"
+if a_price is None:
+    a_src = "nedostupne"
 rows.append(("Allwyn", "ALWN.AT", f"Ateny (ATHEX) \u00b7 {a_src}",
              f"{a_price:.2f}".replace(".", ",") if a_price is not None else "Nedostupne",
              "EUR" if a_price is not None else ""))
@@ -306,7 +332,7 @@ html = f"""<!DOCTYPE html>
       <tbody>{rows_html}</tbody>
     </table>
   </div>
-  <footer>Zdroje: PSE (Moneta) &bull; Euronext/Yahoo (Allwyn) &bull; BCPB (TMR) &bull; CNB (kurz) &bull; Generovano GitHub Actions</footer>
+  <footer>Zdroje: PSE (Moneta) &bull; Yahoo close (Allwyn) &bull; BCPB (TMR) &bull; CNB (kurz) &bull; Generovano GitHub Actions</footer>
 </body>
 </html>"""
 
